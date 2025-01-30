@@ -86,4 +86,4 @@ and sparkworks to help to help developing this project
 ---
 
 For more information, visit our website: [growmate.tech](https://growmate.tech/)
-
+<a href="https://www.digitalocean.com/?refcode=218925646640&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge"><img src="https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg" alt="DigitalOcean Referral Badge" /></a>
