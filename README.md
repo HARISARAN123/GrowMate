@@ -72,7 +72,7 @@ The application will be accessible at `http://127.0.0.1:5000/`.
 
 ## Contributing
 
-Contributions are welcome! Please fork the repository and submit a pull request for any enhancements or bug fixes.
+[Contributions](Contributions) are welcome! Please fork the repository and submit a pull request for any enhancements or bug fixes.
 
 ## License
 
