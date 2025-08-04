@@ -1,0 +1,90 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+
+# dotenv
+.env
+.env.*
+
+# Firebase service account JSON (explicit path)
+aqro-f0322-firebase-adminsdk-fbsvc-f82124232c.json
+
+# VS Code
+.vscode/
+
+# Firebase service account keys
+*.json
+!static/*.json
+!templates/*.json
+
+# Ignore uploads
+static/uploads/
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Logs
+*.log
+
+# Ignore database
+instance/
+*.db
+
+# Ignore runtime files
+runtime.txt
+
+# Ignore secrets
+secrets.*
+
+# Ignore other sensitive files
+*.pem
+*.key
