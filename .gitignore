@@ -52,12 +52,9 @@ coverage.xml
 .env
 .env.*
 
-# Firebase service account JSON (explicit path)
-aqro-f0322-firebase-adminsdk-fbsvc-f82124232c.json
 
 # VS Code
 .vscode/
-
 # Firebase service account keys
 *.json
 !static/*.json
