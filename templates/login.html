@@ -188,7 +188,7 @@
             {% endif %}
         {% endwith %}
 
-        <form class="login-form" action="/login" method="post">
+        <form class="login-form" id="login-form" action="/login" method="post">
             <div class="form-group">
                 <label for="email">Email Address</label>
                 <input type="email" id="email" name="email" required placeholder="Enter your email" />
@@ -197,11 +197,59 @@
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required placeholder="Enter your password" />
             </div>
+            <input type="hidden" id="idToken" name="idToken" />
             <button type="submit" class="login-button">Log In</button>
+            <div style="margin: 1rem 0;">or</div>
+            <button type="button" id="google-login" class="login-button" style="background:#fff;color:#1B1F24;border:1px solid #2EA043;display:flex;align-items:center;justify-content:center;gap:8px;">
+                <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style="width:20px;height:20px;"> Sign in with Google
+            </button>
             <div class="signup-link">
                 Don't have an account? <a href="/signup">Sign Up</a>
             </div>
         </form>
+        <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+        <script>
+        // Firebase config injected from Flask/Jinja2
+        const firebaseConfig = {
+            apiKey: "{{ firebase_api_key }}",
+            authDomain: "{{ firebase_auth_domain }}",
+            projectId: "{{ firebase_project_id }}",
+            storageBucket: "{{ firebase_storage_bucket }}",
+            messagingSenderId: "{{ firebase_messaging_sender_id }}",
+            appId: "{{ firebase_app_id }}",
+            measurementId: "{{ firebase_measurement_id }}"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        document.getElementById('google-login').onclick = function(e) {
+            e.preventDefault();
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).then(result => {
+                return result.user.getIdToken();
+            }).then(idToken => {
+                document.getElementById('idToken').value = idToken;
+                document.getElementById('login-form').submit();
+            }).catch(error => {
+                alert('Google sign-in failed: ' + error.message);
+            });
+        };
+        // Optionally, handle email/password login with Firebase and send idToken
+        document.getElementById('login-form').onsubmit = function(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            auth.signInWithEmailAndPassword(email, password)
+                .then(userCredential => userCredential.user.getIdToken())
+                .then(idToken => {
+                    document.getElementById('idToken').value = idToken;
+                    e.target.submit();
+                })
+                .catch(error => {
+                    alert('Login failed: ' + error.message);
+                });
+        };
+        </script>
     </div>
 </body>
 </html>

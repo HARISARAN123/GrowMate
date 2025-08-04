@@ -7,17 +7,24 @@ from flask import Flask, render_template,send_from_directory, request, redirect,
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from disease_detection import analyze_plant_disease, get_gemini_analysis, fetch_gemini_response
-from database_init import add_user, verify_user, init_db
 
 # Load environment variables
 load_dotenv()
-init_db()
+
 
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['UPLOAD_FOLDER'] = 'static/uploads/'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Limit file upload size to 16MB
+
+# Initialize Firebase Admin SDK (ensure you have your service account key JSON file)
+import firebase_admin
+from firebase_admin import credentials, auth
+if not firebase_admin._apps:
+    cred_path = os.getenv('FIREBASE_ADMIN_CREDENTIALS')
+    cred = credentials.Certificate(cred_path)
+    firebase_admin.initialize_app(cred)
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
@@ -38,69 +45,48 @@ def make_unique_filename(filename):
     return unique_filename
 
 
-
-
-
+# Login route using Firebase Authentication
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Handle user login."""
+    """Handle user login with Firebase ID token."""
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-
-        if verify_user(email, password):
-            # Start user session
+        id_token = request.form.get('idToken')
+        try:
+            decoded_token = auth.verify_id_token(id_token)
             session['logged_in'] = True
-            session['email'] = email
+            session['email'] = decoded_token['email']
+            session['uid'] = decoded_token['uid']
             flash('Login successful!', 'success')
             return redirect(url_for('home'))
-        else:
-            flash('Invalid email or password', 'error')
+        except Exception as e:
+            flash('Invalid authentication. Please try again.', 'error')
+    return render_template(
+        'login.html',
+        firebase_api_key=os.getenv('FIREBASE_API_KEY'),
+        firebase_auth_domain=os.getenv('FIREBASE_AUTH_DOMAIN'),
+        firebase_project_id=os.getenv('FIREBASE_PROJECT_ID'),
+        firebase_storage_bucket=os.getenv('FIREBASE_STORAGE_BUCKET'),
+        firebase_messaging_sender_id=os.getenv('FIREBASE_MESSAGING_SENDER_ID'),
+        firebase_app_id=os.getenv('FIREBASE_APP_ID'),
+        firebase_measurement_id=os.getenv('FIREBASE_MEASUREMENT_ID')
+    )
 
-    return render_template('login.html')
-
-
+# Signup route (handled on frontend)
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    """Handle user registration."""
-    if request.method == 'POST':
-        first_name = request.form.get('first_name')
-        last_name = request.form.get('last_name')
-        email = request.form.get('email')
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
-        user_type = request.form.get('user_type')
-        farm_location = request.form.get('farm_location', None)
-
-        # Basic validation
-        if password != confirm_password:
-            flash('Passwords do not match', 'error')
-            return redirect(url_for('signup'))
-
-        # Attempt to add user
-        result = add_user(
-            first_name,
-            last_name,
-            email,
-            password,
-            user_type,
-            farm_location
-        )
-
-        if result:
-            flash('Account created successfully! Please log in.', 'success')
-            return redirect(url_for('login'))
-        else:
-            flash('Email already exists. Please use a different email.', 'error')
-
-    return render_template('signup.html')
-
-@app.route('/logout')
-def logout():
-    """Handle user logout."""
-    session.clear()
-    flash('You have been logged out.', 'success')
-    return redirect(url_for('login'))
+    """Handle user registration with Firebase (handled on frontend)."""
+    # Registration is handled by Firebase on the frontend.
+    # Optionally, you can collect extra user info here if needed.
+    return render_template(
+        'signup.html',
+        firebase_api_key=os.getenv('FIREBASE_API_KEY'),
+        firebase_auth_domain=os.getenv('FIREBASE_AUTH_DOMAIN'),
+        firebase_project_id=os.getenv('FIREBASE_PROJECT_ID'),
+        firebase_storage_bucket=os.getenv('FIREBASE_STORAGE_BUCKET'),
+        firebase_messaging_sender_id=os.getenv('FIREBASE_MESSAGING_SENDER_ID'),
+        firebase_app_id=os.getenv('FIREBASE_APP_ID'),
+        firebase_measurement_id=os.getenv('FIREBASE_MEASUREMENT_ID')
+    )
 
 # Add a decorator to protect routes that require login
 def login_required(f):

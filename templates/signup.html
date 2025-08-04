@@ -198,7 +198,7 @@
             {% endif %}
         {% endwith %}
 
-        <form class="signup-form" action="/signup" method="post">
+        <form class="signup-form" id="signup-form" action="/signup" method="post">
             <div class="user-type">
                 <div class="user-type-option">
                     <input type="radio" id="farmer" name="user_type" value="farmer" required>
@@ -246,7 +246,12 @@
                 <input type="text" id="farm_location" name="farm_location" placeholder="City, State, Country" />
             </div>
 
+            <input type="hidden" id="idToken" name="idToken" />
             <button type="submit" class="signup-button">Create Account</button>
+            <div style="margin: 1rem 0;">or</div>
+            <button type="button" id="google-signup" class="signup-button" style="background:#fff;color:#1B1F24;border:1px solid #2EA043;display:flex;align-items:center;justify-content:center;gap:8px;">
+                <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style="width:20px;height:20px;"> Sign up with Google
+            </button>
 
             <div class="login-link">
                 Already have an account? <a href="/login">Log In</a>
@@ -254,25 +259,58 @@
         </form>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script>
-        document.querySelector('.signup-form').addEventListener('submit', function(e) {
+        // Firebase config injected from Flask/Jinja2
+        const firebaseConfig = {
+            apiKey: "{{ firebase_api_key }}",
+            authDomain: "{{ firebase_auth_domain }}",
+            projectId: "{{ firebase_project_id }}",
+            storageBucket: "{{ firebase_storage_bucket }}",
+            messagingSenderId: "{{ firebase_messaging_sender_id }}",
+            appId: "{{ firebase_app_id }}",
+            measurementId: "{{ firebase_measurement_id }}"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        document.getElementById('google-signup').onclick = function(e) {
+            e.preventDefault();
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).then(result => {
+                return result.user.getIdToken();
+            }).then(idToken => {
+                document.getElementById('idToken').value = idToken;
+                document.getElementById('signup-form').submit();
+            }).catch(error => {
+                alert('Google sign-up failed: ' + error.message);
+            });
+        };
+        document.getElementById('signup-form').onsubmit = function(e) {
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirm_password').value;
-            const email = document.getElementById('email').value;
-
-            // Basic validation
             if (password !== confirmPassword) {
                 e.preventDefault();
                 alert('Passwords do not match');
                 return;
             }
-
-            // Optional: Password strength check
             if (password.length < 8) {
                 e.preventDefault();
                 alert('Password must be at least 8 characters long');
+                return;
             }
-        });
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            auth.createUserWithEmailAndPassword(email, password)
+                .then(userCredential => userCredential.user.getIdToken())
+                .then(idToken => {
+                    document.getElementById('idToken').value = idToken;
+                    e.target.submit();
+                })
+                .catch(error => {
+                    alert('Signup failed: ' + error.message);
+                });
+        };
     </script>
 </body>
 </html>
