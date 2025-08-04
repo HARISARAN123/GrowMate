@@ -24,9 +24,9 @@ google-cloud-storage==3.2.0
 google-crc32c==1.7.1
 google-pasta==0.2.0
 google-resumable-media==2.7.2
-googleapis-common-protos==1.70.0
+googleapis-common-protos
 grpcio==1.74.0
-grpcio-status==1.74.0
+grpcio-status
 h11==0.16.0
 h2==4.2.0
 h5py==3.12.1
@@ -52,7 +52,7 @@ opt_einsum==3.4.0
 optree==0.13.1
 packaging==24.2
 pillow==11.1.0
-proto-plus==1.26.1
+proto-plus
 psycopg==3.2.4
 psycopg-binary==3.2.4
 pyasn1==0.6.1
