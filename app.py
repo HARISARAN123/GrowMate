@@ -19,12 +19,26 @@ app.config['UPLOAD_FOLDER'] = 'static/uploads/'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Limit file upload size to 16MB
 
 
-# Initialize Firebase Admin SDK using environment variables (for Vercel compatibility)
+# Initialize Firebase Admin SDK
 import firebase_admin
 from firebase_admin import credentials, auth
 if not firebase_admin._apps:
-    cred = credentials.Certificate("aqro-f0322-firebase-adminsdk-fbsvc-f82124232c.json")
-    firebase_admin.initialize_app(cred)
+    try:
+        cred_path = os.path.join(os.path.dirname(__file__), "aqro-f0322-firebase-adminsdk-fbsvc-f82124232c.json")
+        if os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+            print(f"✅ Firebase credentials found at: {cred_path}")
+        else:
+            cred = credentials.Certificate("aqro-f0322-firebase-adminsdk-fbsvc-f82124232c.json")
+            print("✅ Using direct path for Firebase credentials")
+        firebase_admin.initialize_app(cred)
+        print("✅ Firebase initialized successfully")
+        print(f"✅ Project ID: {cred.project_id}")
+    except Exception as e:
+        print(f"❌ Failed to initialize Firebase: {e}")
+        print(f"❌ Current directory: {os.getcwd()}")
+        print(f"❌ Files in directory: {os.listdir('.')}")
+        raise
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
@@ -51,15 +65,36 @@ def login():
     """Handle user login with Firebase ID token."""
     if request.method == 'POST':
         id_token = request.form.get('idToken')
+        if not id_token:
+            flash('No authentication token provided.', 'error')
+            return redirect(url_for('login'))
+        
         try:
+            # Verify the Firebase ID token
             decoded_token = auth.verify_id_token(id_token)
             session['logged_in'] = True
-            session['email'] = decoded_token['email']
-            session['uid'] = decoded_token['uid']
+            session['email'] = decoded_token.get('email', '')
+            session['uid'] = decoded_token.get('uid', '')
+            session['name'] = decoded_token.get('name', '')
             flash('Login successful!', 'success')
-            return redirect(url_for('home'))
+            
+            # Redirect to the page user was trying to access, or home
+            next_page = request.form.get('next') or url_for('home')
+            return redirect(next_page)
+            
+        except ValueError as ve:
+            logger.error(f"Invalid token format: {ve}")
+            flash('Invalid authentication token format.', 'error')
+        except auth.InvalidIdTokenError as ie:
+            logger.error(f"Invalid ID token: {ie}")
+            flash('Authentication token is invalid or expired.', 'error')
+        except auth.ExpiredIdTokenError as ee:
+            logger.error(f"Expired token: {ee}")
+            flash('Authentication token has expired. Please log in again.', 'error')
         except Exception as e:
-            flash('Invalid authentication. Please try again.', 'error')
+            logger.error(f"Authentication error: {e}")
+            flash('Authentication failed. Please try again.', 'error')
+    
     return render_template(
         'login.html',
         firebase_api_key=os.getenv('FIREBASE_API_KEY'),
@@ -88,19 +123,45 @@ def signup():
         firebase_measurement_id=os.getenv('FIREBASE_MEASUREMENT_ID')
     )
 
+# Logout route
+@app.route('/logout')
+def logout():
+    """Handle user logout."""
+    session.clear()
+    flash('You have been logged out successfully.', 'info')
+    return redirect(url_for('home'))
+
 # Add a decorator to protect routes that require login
 def login_required(f):
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session:
+        if not session.get('logged_in') or not session.get('uid'):
             flash('Please log in to access this page.', 'error')
-            return redirect(url_for('login'))
+            return redirect(url_for('login', next=request.url))
         return f(*args, **kwargs)
     return decorated_function
 
 @app.route('/')
 def home():
     return render_template('index.html')
+
+# Test route to verify Firebase authentication
+@app.route('/test-auth')
+def test_auth():
+    """Test route to verify Firebase is working"""
+    try:
+        # Test if Firebase is initialized
+        app_info = firebase_admin.get_app()
+        return jsonify({
+            'status': 'success',
+            'message': 'Firebase is initialized correctly',
+            'project_id': app_info.project_id if hasattr(app_info, 'project_id') else 'N/A'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error', 
+            'message': f'Firebase error: {str(e)}'
+        }), 500
 @app.route('/disease-detection', methods=['GET', 'POST'])
 @login_required
 def disease_detection():
@@ -226,21 +287,23 @@ def analyze():
 def about_us():
     return render_template('about_us.html')
 
+@app.route('/robots.txt')
 def robots():
     return send_from_directory(os.path.join(app.root_path, 'static'), 'Robots.txt')
 
 @app.route('/sitemap.xml')
 def sitemap():
     return send_from_directory(os.path.join(app.root_path, 'static'), 'sitemap.xml')
+
 # Custom 500 error handler
 @app.errorhandler(500)
 def internal_server_error(e):
-    return render_template('error.html'), 505
+    return render_template('error.html'), 500
 
 @app.errorhandler(404)
 def page_not_found(e):
     # Render the custom 404 page
-        return render_template('error.html'), 404
+    return render_template('error.html'), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=False)

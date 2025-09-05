@@ -220,35 +220,61 @@
             appId: "{{ firebase_app_id }}",
             measurementId: "{{ firebase_measurement_id }}"
         };
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        document.getElementById('google-login').onclick = function(e) {
-            e.preventDefault();
-            const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).then(result => {
-                return result.user.getIdToken();
-            }).then(idToken => {
-                document.getElementById('idToken').value = idToken;
-                document.getElementById('login-form').submit();
-            }).catch(error => {
-                alert('Google sign-in failed: ' + error.message);
-            });
-        };
-        // Optionally, handle email/password login with Firebase and send idToken
-        document.getElementById('login-form').onsubmit = function(e) {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            auth.signInWithEmailAndPassword(email, password)
-                .then(userCredential => userCredential.user.getIdToken())
-                .then(idToken => {
+        
+        console.log('Firebase Config:', firebaseConfig);
+        
+        try {
+            firebase.initializeApp(firebaseConfig);
+            const auth = firebase.auth();
+            console.log('Firebase initialized successfully');
+            
+            document.getElementById('google-login').onclick = function(e) {
+                e.preventDefault();
+                const provider = new firebase.auth.GoogleAuthProvider();
+                auth.signInWithPopup(provider).then(result => {
+                    console.log('Google sign-in successful:', result.user.email);
+                    return result.user.getIdToken();
+                }).then(idToken => {
+                    console.log('ID Token received:', idToken ? 'Yes' : 'No');
                     document.getElementById('idToken').value = idToken;
-                    e.target.submit();
-                })
-                .catch(error => {
-                    alert('Login failed: ' + error.message);
+                    document.getElementById('login-form').submit();
+                }).catch(error => {
+                    console.error('Google sign-in error:', error);
+                    alert('Google sign-in failed: ' + error.message);
                 });
-        };
+            };
+            
+            // Handle email/password login with Firebase and send idToken
+            document.getElementById('login-form').onsubmit = function(e) {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                if (!email || !password) {
+                    alert('Please enter both email and password');
+                    return;
+                }
+                
+                console.log('Attempting email/password sign-in for:', email);
+                auth.signInWithEmailAndPassword(email, password)
+                    .then(userCredential => {
+                        console.log('Email/password sign-in successful:', userCredential.user.email);
+                        return userCredential.user.getIdToken();
+                    })
+                    .then(idToken => {
+                        console.log('ID Token received:', idToken ? 'Yes' : 'No');
+                        document.getElementById('idToken').value = idToken;
+                        e.target.submit();
+                    })
+                    .catch(error => {
+                        console.error('Email/password sign-in error:', error);
+                        alert('Login failed: ' + error.message);
+                    });
+            };
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            alert('Firebase initialization failed. Please check console for details.');
+        }
         </script>
     </div>
 </body>
