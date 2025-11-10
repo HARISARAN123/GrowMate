@@ -1,7 +1,6 @@
 # GrowMate
 
-Growmate is an AI-powered farming solution designed to assist farmers in optimizing their agricultural practices. This Flask-based web application integrates advanced features such as plant disease detection and farm management tools to enhance productivity and sustainability. ([growmate.tech](https://growmate.tech/?utm_source=chatgpt.com))
-
+Growmate is an AI-powered farming solution designed to assist farmers in optimizing their agricultural practices. This Flask-based web application integrates advanced features such as plant disease detection and farm management tools to enhance productivity and sustainability. 
 ## Features
 
 - **AI Plant Disease Detection**: Utilizes cutting-edge AI to diagnose plant diseases, preventing crop losses and improving overall farm health.
