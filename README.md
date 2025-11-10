@@ -80,9 +80,7 @@ This project is licensed under the GNU General Public License v3.0. See the [LIC
 ## Acknowledgements
 
 Special thanks to the developers and contributors of the open-source libraries and APIs utilized in this project.
-and sparkworks to help to help developing this project
+and aqro.in to help developing this project
 
 ---
 
-For more information, visit our website: [growmate.tech](https://growmate.tech/)
-[![DigitalOcean Referral Badge](https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%202.svg)](https://www.digitalocean.com/?refcode=218925646640&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge)
