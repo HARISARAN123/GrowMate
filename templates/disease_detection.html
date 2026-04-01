@@ -265,6 +265,86 @@
             font-size: 0.9rem;
         }
 
+        .analysis-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(27, 31, 36, 0.78);
+            backdrop-filter: blur(2px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 1rem;
+        }
+
+        .analysis-overlay.active {
+            display: flex;
+        }
+
+        .analysis-card {
+            width: min(92vw, 420px);
+            background: var(--white);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            border: 2px solid var(--accent-green);
+        }
+
+        .analysis-spinner {
+            width: 68px;
+            height: 68px;
+            border: 6px solid #d9f5df;
+            border-top-color: var(--brand-green);
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            animation: spin 1s linear infinite;
+        }
+
+        .analysis-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--dark-green);
+            margin-bottom: 0.5rem;
+        }
+
+        .analysis-subtitle {
+            color: var(--dark-gray);
+            font-size: 0.95rem;
+        }
+
+        .analysis-dots::after {
+            content: '';
+            display: inline-block;
+            width: 1.2em;
+            text-align: left;
+            animation: dots 1.2s infinite steps(4, end);
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes dots {
+            0% {
+                content: '';
+            }
+            25% {
+                content: '.';
+            }
+            50% {
+                content: '..';
+            }
+            75% {
+                content: '...';
+            }
+            100% {
+                content: '';
+            }
+        }
+
         footer {
             background: var(--black);
             color: var(--white);
@@ -390,7 +470,7 @@
     <div class="upload-container">
         <h2 class="upload-title">Upload Plant Image for Disease Detection</h2>
         <p class="upload-description">Select an image of the plant to diagnose its disease.</p>
-        <form action="{{ url_for('disease_detection') }}" method="POST" enctype="multipart/form-data">
+        <form id="upload-form" action="{{ url_for('disease_detection') }}" method="POST" enctype="multipart/form-data">
             <div id="drop-area" class="upload-area">
                 <input type="file" id="file-input" name="image" accept="image/*" style="display:none;">
                 <div class="upload-icon">📷</div>
@@ -413,6 +493,14 @@
     {% endif %}
 </main>
 
+<div id="analysis-overlay" class="analysis-overlay" aria-live="polite" aria-busy="true">
+    <div class="analysis-card">
+        <div class="analysis-spinner"></div>
+        <div class="analysis-title">AI Model is analyzing your plant</div>
+        <div class="analysis-subtitle">Running disease detection and generating recommendations<span class="analysis-dots"></span></div>
+    </div>
+</div>
+
 <footer>
     <div class="footer-content">
         <p>&copy; 2024 Growmate - Your AI Partner for Sustainable Agriculture 🌱</p>
@@ -424,6 +512,7 @@
     const fileInput = document.getElementById('file-input');
     const uploadButton = document.getElementById('upload-button');
     const uploadForm = document.getElementById('upload-form');
+    const analysisOverlay = document.getElementById('analysis-overlay');
 
     // Prevent default drag behaviors
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -484,6 +573,18 @@
             }
         }
     }
+
+    uploadForm.addEventListener('submit', function (e) {
+        if (!fileInput.files || fileInput.files.length === 0) {
+            e.preventDefault();
+            alert('Please upload an image first.');
+            return;
+        }
+
+        uploadButton.disabled = true;
+        uploadButton.textContent = 'Analyzing...';
+        analysisOverlay.classList.add('active');
+    });
 
     function toggleNav(element) {
         const navLinks = document.querySelector('.nav-links');

@@ -60,8 +60,9 @@ coverage.xml
 !static/*.json
 !templates/*.json
 
-# Ignore uploads
-static/uploads/
+# Ignore uploads contents but keep the folder itself
+static/uploads/*
+!static/uploads/.gitkeep
 
 # MacOS
 .DS_Store

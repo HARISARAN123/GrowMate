@@ -394,7 +394,15 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script id="initial-chat-history" type="application/json">{{ chat_history | tojson }}</script>
 <script>
+    marked.setOptions({
+        gfm: true,
+        breaks: true
+    });
+
+    const initialHistoryElement = document.getElementById('initial-chat-history');
+    const initialChatHistory = initialHistoryElement ? JSON.parse(initialHistoryElement.textContent || '[]') : [];
     const chatForm = document.getElementById('chatForm');
     const chatMessages = document.getElementById('chatMessages');
     const userInput = document.getElementById('userInput');
@@ -419,9 +427,23 @@
     function addMessage(sender, text) {
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('message', `${sender}-message`);
-        messageDiv.innerHTML = marked.parse(text);
+        if (sender === 'user') {
+            messageDiv.textContent = text;
+        } else {
+            messageDiv.innerHTML = marked.parse(text);
+        }
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    if (Array.isArray(initialChatHistory)) {
+        initialChatHistory.forEach(item => {
+            if (item.role === 'user') {
+                addMessage('user', item.text || '');
+            } else {
+                addMessage('bot', item.text || '');
+            }
+        });
     }
 
     function fetchBotReply(message) {
@@ -434,6 +456,13 @@
         })
             .then(response => response.json())
             .then(data => {
+                if (data.debug) {
+                    if (data.debug.ok) {
+                        console.log('[Gemini Debug] Success:', data.debug);
+                    } else {
+                        console.error('[Gemini Debug] Failure:', data.debug);
+                    }
+                }
                 addMessage('bot', data.response);
             })
             .catch(error => {

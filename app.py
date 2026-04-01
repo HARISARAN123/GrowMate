@@ -1,20 +1,31 @@
 import os
+import json
+import base64
+import uuid
+import re
 import logging
-import requests
 import markdown
-import functools  # Add this line
+import functools
 from flask import Flask, render_template,send_from_directory, request, redirect, url_for, flash, jsonify, session
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from disease_detection import analyze_plant_disease, get_gemini_analysis, fetch_gemini_response
+from firebase_service import (
+    upsert_user_profile,
+    save_disease_analysis,
+    save_farm_recommendation,
+    save_chat_message,
+    get_chat_messages,
+    create_chat_session,
+)
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)
 
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['UPLOAD_FOLDER'] = 'static/uploads/'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Limit file upload size to 16MB
 
@@ -22,27 +33,64 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Limit file upload size to
 # Initialize Firebase Admin SDK
 import firebase_admin
 from firebase_admin import credentials, auth
-if not firebase_admin._apps:
+from firebase_admin import firestore
+
+
+def firebase_project_mismatch_message():
+    """Return a mismatch message if web/app Firebase projects differ."""
+    expected_project_id = (os.getenv('FIREBASE_PROJECT_ID') or '').strip()
+    admin_project_id = ''
     try:
-        cred_path = os.path.join(os.path.dirname(__file__), "aqro-f0322-firebase-adminsdk-fbsvc-f82124232c.json")
-        if os.path.exists(cred_path):
-            cred = credentials.Certificate(cred_path)
-            print(f"✅ Firebase credentials found at: {cred_path}")
+        admin_project_id = (firebase_admin.get_app().project_id or '').strip()
+    except Exception:
+        return None
+
+    if expected_project_id and admin_project_id and expected_project_id != admin_project_id:
+        return (
+            f"Firebase project mismatch: web config uses '{expected_project_id}' "
+            f"but Admin SDK uses '{admin_project_id}'. Update FIREBASE_CREDENTIALS_PATH "
+            "or FIREBASE_SERVICE_ACCOUNT_JSON/B64 to a service account from the same project."
+        )
+    return None
+
+
+def initialize_firebase():
+    """Initialize Firebase app from env or local credential file."""
+    if firebase_admin._apps:
+        return firebase_admin.get_app()
+
+    service_account_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
+    service_account_b64 = os.getenv('FIREBASE_SERVICE_ACCOUNT_B64')
+    service_account_path = os.getenv(
+        'FIREBASE_CREDENTIALS_PATH',
+        os.path.join(os.path.dirname(__file__), 'aqro-f0322-firebase-adminsdk-fbsvc-f82124232c.json'),
+    )
+
+    try:
+        if service_account_json:
+            cred = credentials.Certificate(json.loads(service_account_json))
+        elif service_account_b64:
+            decoded = base64.b64decode(service_account_b64).decode('utf-8')
+            cred = credentials.Certificate(json.loads(decoded))
+        elif os.path.exists(service_account_path):
+            cred = credentials.Certificate(service_account_path)
         else:
-            cred = credentials.Certificate("aqro-f0322-firebase-adminsdk-fbsvc-f82124232c.json")
-            print("✅ Using direct path for Firebase credentials")
-        firebase_admin.initialize_app(cred)
-        print("✅ Firebase initialized successfully")
-        print(f"✅ Project ID: {cred.project_id}")
+            raise RuntimeError('Firebase credentials not found. Set FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_SERVICE_ACCOUNT_B64, or FIREBASE_CREDENTIALS_PATH.')
+
+        return firebase_admin.initialize_app(cred)
     except Exception as e:
-        print(f"❌ Failed to initialize Firebase: {e}")
-        print(f"❌ Current directory: {os.getcwd()}")
-        print(f"❌ Files in directory: {os.listdir('.')}")
+        logger.error("Failed to initialize Firebase: %s", e)
         raise
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+initialize_firebase()
+
+mismatch_message = firebase_project_mismatch_message()
+if mismatch_message:
+    logger.warning(mismatch_message)
 
 # Ensure the upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -59,6 +107,39 @@ def make_unique_filename(filename):
     return unique_filename
 
 
+def render_ai_markdown(text):
+    """Render AI markdown with richer formatting support (tables, lists, code)."""
+    return markdown.markdown(
+        text or "",
+        extensions=['extra', 'sane_lists', 'nl2br'],
+        output_format='html5',
+    )
+
+
+def get_firebase_template_context():
+    """Return Firebase web config for auth templates."""
+    def clean_value(name):
+        raw = (os.getenv(name) or '').strip().strip('"').strip("'")
+        if not raw:
+            return ''
+        # Keep only the first token if accidental pasted text exists.
+        return raw.split()[0].rstrip(',;')
+
+    raw_api_key = (os.getenv('FIREBASE_API_KEY') or '').strip()
+    api_key_match = re.search(r'(AIza[0-9A-Za-z_-]{20,})', raw_api_key)
+    firebase_api_key = api_key_match.group(1) if api_key_match else clean_value('FIREBASE_API_KEY')
+
+    return {
+        'firebase_api_key': firebase_api_key,
+        'firebase_auth_domain': clean_value('FIREBASE_AUTH_DOMAIN'),
+        'firebase_project_id': clean_value('FIREBASE_PROJECT_ID'),
+        'firebase_storage_bucket': clean_value('FIREBASE_STORAGE_BUCKET'),
+        'firebase_messaging_sender_id': clean_value('FIREBASE_MESSAGING_SENDER_ID'),
+        'firebase_app_id': clean_value('FIREBASE_APP_ID'),
+        'firebase_measurement_id': clean_value('FIREBASE_MEASUREMENT_ID'),
+    }
+
+
 # Login route using Firebase Authentication
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -72,10 +153,25 @@ def login():
         try:
             # Verify the Firebase ID token
             decoded_token = auth.verify_id_token(id_token)
+            uid = decoded_token.get('uid', '')
+            email = decoded_token.get('email', '')
+            name = decoded_token.get('name', '')
+
             session['logged_in'] = True
-            session['email'] = decoded_token.get('email', '')
-            session['uid'] = decoded_token.get('uid', '')
-            session['name'] = decoded_token.get('name', '')
+            session['email'] = email
+            session['uid'] = uid
+            session['name'] = name
+
+            upsert_user_profile(
+                uid,
+                {
+                    'uid': uid,
+                    'email': email,
+                    'name': name,
+                    'auth_provider': decoded_token.get('firebase', {}).get('sign_in_provider', ''),
+                },
+            )
+
             flash('Login successful!', 'success')
             
             # Redirect to the page user was trying to access, or home
@@ -87,7 +183,11 @@ def login():
             flash('Invalid authentication token format.', 'error')
         except auth.InvalidIdTokenError as ie:
             logger.error(f"Invalid ID token: {ie}")
-            flash('Authentication token is invalid or expired.', 'error')
+            mismatch_message = firebase_project_mismatch_message()
+            if mismatch_message:
+                flash(mismatch_message, 'error')
+            else:
+                flash('Authentication token is invalid or expired.', 'error')
         except auth.ExpiredIdTokenError as ee:
             logger.error(f"Expired token: {ee}")
             flash('Authentication token has expired. Please log in again.', 'error')
@@ -95,33 +195,54 @@ def login():
             logger.error(f"Authentication error: {e}")
             flash('Authentication failed. Please try again.', 'error')
     
-    return render_template(
-        'login.html',
-        firebase_api_key=os.getenv('FIREBASE_API_KEY'),
-        firebase_auth_domain=os.getenv('FIREBASE_AUTH_DOMAIN'),
-        firebase_project_id=os.getenv('FIREBASE_PROJECT_ID'),
-        firebase_storage_bucket=os.getenv('FIREBASE_STORAGE_BUCKET'),
-        firebase_messaging_sender_id=os.getenv('FIREBASE_MESSAGING_SENDER_ID'),
-        firebase_app_id=os.getenv('FIREBASE_APP_ID'),
-        firebase_measurement_id=os.getenv('FIREBASE_MEASUREMENT_ID')
-    )
+    return render_template('login.html', **get_firebase_template_context())
 
 # Signup route (handled on frontend)
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    """Handle user registration with Firebase (handled on frontend)."""
-    # Registration is handled by Firebase on the frontend.
-    # Optionally, you can collect extra user info here if needed.
-    return render_template(
-        'signup.html',
-        firebase_api_key=os.getenv('FIREBASE_API_KEY'),
-        firebase_auth_domain=os.getenv('FIREBASE_AUTH_DOMAIN'),
-        firebase_project_id=os.getenv('FIREBASE_PROJECT_ID'),
-        firebase_storage_bucket=os.getenv('FIREBASE_STORAGE_BUCKET'),
-        firebase_messaging_sender_id=os.getenv('FIREBASE_MESSAGING_SENDER_ID'),
-        firebase_app_id=os.getenv('FIREBASE_APP_ID'),
-        firebase_measurement_id=os.getenv('FIREBASE_MEASUREMENT_ID')
-    )
+    """Handle user registration and profile persistence with Firebase + Firestore."""
+    if request.method == 'POST':
+        id_token = request.form.get('idToken')
+        if not id_token:
+            flash('No authentication token provided.', 'error')
+            return redirect(url_for('signup'))
+
+        try:
+            decoded_token = auth.verify_id_token(id_token)
+            uid = decoded_token.get('uid', '')
+            email = decoded_token.get('email', request.form.get('email', ''))
+            first_name = request.form.get('first_name', '').strip()
+            last_name = request.form.get('last_name', '').strip()
+            user_type = request.form.get('user_type', '').strip()
+            farm_location = request.form.get('farm_location', '').strip()
+            full_name = (f"{first_name} {last_name}").strip() or decoded_token.get('name', '')
+
+            upsert_user_profile(
+                uid,
+                {
+                    'uid': uid,
+                    'email': email,
+                    'name': full_name,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'user_type': user_type,
+                    'farm_location': farm_location,
+                    'auth_provider': decoded_token.get('firebase', {}).get('sign_in_provider', ''),
+                    'created_at': firestore.SERVER_TIMESTAMP,
+                },
+            )
+
+            session['logged_in'] = True
+            session['email'] = email
+            session['uid'] = uid
+            session['name'] = full_name
+            flash('Account created successfully!', 'success')
+            return redirect(url_for('home'))
+        except Exception as e:
+            logger.error("Signup failed: %s", e)
+            flash('Signup failed. Please try again.', 'error')
+
+    return render_template('signup.html', **get_firebase_template_context())
 
 # Logout route
 @app.route('/logout')
@@ -184,7 +305,18 @@ def disease_detection():
         image_url = url_for('static', filename=f'uploads/{filename}')
         logger.info(f"Result: {result}")
         logger.info(f"Gemini Analysis: {gemini_analysis}")
-        gemini_analysis_html = markdown.markdown(gemini_analysis)
+
+        save_disease_analysis(
+            session['uid'],
+            {
+                'image_url': image_url,
+                'prediction': result.get('prediction', ''),
+                'confidence': float(result.get('confidence', 0.0)),
+                'gemini_analysis': gemini_analysis,
+            },
+        )
+
+        gemini_analysis_html = render_ai_markdown(gemini_analysis)
         return render_template('result.html', result=result, gemini_analysis=gemini_analysis_html, image_url=image_url)
     return render_template('disease_detection.html')
 
@@ -199,8 +331,18 @@ def farm_management():
         location = request.form.get('location')
         language = request.form.get('language')
         recommendation = get_farm_recommendations(area, Soil_test_result, language, location)
+        save_farm_recommendation(
+            session['uid'],
+            {
+                'area': area,
+                'soil_test_result': Soil_test_result,
+                'language': language,
+                'location': location,
+                'recommendation': recommendation,
+            },
+        )
         # Convert recommendation to HTML using markdown
-        recommendation_html = markdown.markdown(recommendation)
+        recommendation_html = render_ai_markdown(recommendation)
 
         return render_template('farm_management.html', recommendation=recommendation_html)
     return render_template('farm_management.html')
@@ -224,45 +366,31 @@ def get_farm_recommendations(area, Soil_test_result, language, location):
 @login_required
 def chatbot():
     """Handle chatbot interactions."""
-    if 'chat_history' not in session:
-        session['chat_history'] = []  # Initialize chat history
+    uid = session['uid']
+    chat_session_id = session.get('chat_session_id')
+    if not chat_session_id:
+        chat_session_id = str(uuid.uuid4())
+        session['chat_session_id'] = chat_session_id
+        create_chat_session(uid, chat_session_id)
+
     if request.method == 'POST':
         message = request.form['message']
-        raw_response = get_gemini_reply(message)
-        # Convert raw response to HTML using markdown
-        formatted_response = markdown.markdown(raw_response)
-        session['chat_history'].append(("You", message))
-        session['chat_history'].append(("Bot", formatted_response))  # Use the formatted response
-        return jsonify({"response": formatted_response})
-    return render_template('chatbot.html', chat_history=session['chat_history'])
+        save_chat_message(uid, chat_session_id, 'user', message)
+
+        raw_response, gemini_debug = get_gemini_reply(message, include_debug=True)
+        save_chat_message(uid, chat_session_id, 'bot', raw_response)
+
+        return jsonify({"response": raw_response, "debug": gemini_debug})
+
+    return render_template(
+        'chatbot.html',
+        chat_history=get_chat_messages(uid, chat_session_id),
+    )
 
 
-def get_gemini_reply(message):
+def get_gemini_reply(message, include_debug=False):
     """Get chatbot reply using the Gemini API."""
-    return fetch_gemini_response(message)
-
-
-def fetch_gemini_response(prompt):
-    """Fetch response from Gemini API."""
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # Store the API key securely
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    data = {"contents": [{"parts": [{"text": prompt}]}]}
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()
-        response_data = response.json()
-        logger.info(f"Gemini analysis response data: {response_data}")
-        if 'candidates' in response_data and response_data['candidates']:
-            candidate = response_data['candidates'][0]
-            text_part = candidate.get('content', {}).get('parts', [{}])[0]
-            return text_part.get('text', "Unable to fetch detailed analysis.")
-        else:
-            logger.warning("No candidates found in response.")
-            return "Unable to generate analysis at this time."
-    except requests.RequestException as e:
-        logger.error(f"Error fetching Gemini analysis: {e}")
-        return "Error occurred while fetching analysis."
+    return fetch_gemini_response(message, include_debug=include_debug)
 
 
 @app.route('/analyze', methods=['POST'])
@@ -277,6 +405,15 @@ def analyze():
     file.save(file_path)
     try:
         result = analyze_plant_disease(file_path)
+        save_disease_analysis(
+            session['uid'],
+            {
+                'image_url': url_for('static', filename=f'uploads/{filename}'),
+                'prediction': result.get('prediction', ''),
+                'confidence': float(result.get('confidence', 0.0)),
+                'source': 'analyze-api',
+            },
+        )
         return jsonify(result), 200
     except Exception as e:
         logger.error(f"Error analyzing plant disease: {e}")

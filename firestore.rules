@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /chat_sessions/{sessionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+
+        match /messages/{messageId} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+        }
+      }
+
+      match /analysis_history/{analysisId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /farm_recommendations/{recommendationId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}
