@@ -8,3 +8,7 @@ Markdown==3.7
 firebase-admin==6.5.0
 tensorflow==2.21.0
 Pillow==10.4.0
+livekit-api>=0.5.0
+livekit-agents>=0.12.0
+livekit-plugins-google>=0.10.0
+livekit-plugins-noise-cancellation>=0.6.0

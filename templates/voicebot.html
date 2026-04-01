@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Bot - Growmate | Agriculture App</title>
+
+    <meta name="description" content="Growmate Voice Bot - Real-time voice assistance for agriculture advice, farm planning, and plant disease detection.">
+    <meta name="keywords" content="Growmate, voice bot, real-time voice, agriculture advice, farm planning, AI voice assistant">
+    <meta name="robots" content="index, follow">
+    <meta property="og:title" content="Voice Bot - Growmate">
+    <meta property="og:description" content="Real-time voice assistance for agriculture solutions.">
+    <meta name="twitter:card" content="summary_large_image">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='Growmatelogo_favicon.png') }}">
+
+    <style>
+        :root {
+            --brand-green: #2EA043;
+            --dark-green: #216E2E;
+            --light-green: #3FB950;
+            --accent-green: #DAFBE1;
+            --black: #1B1F24;
+            --dark-gray: #2D333B;
+            --light-gray: #F6F8FA;
+            --white: #ffffff;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+            --container-width: 1200px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            scroll-behavior: smooth;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--light-gray);
+            color: var(--black);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .navbar {
+            background: var(--black);
+            box-shadow: var(--shadow);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 0.8rem 0;
+        }
+
+        .nav-container {
+            max-width: var(--container-width);
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 1rem;
+            position: relative;
+        }
+
+        .logo {
+            font-size: clamp(1.25rem, 4vw, 1.75rem);
+            font-weight: 700;
+            color: var(--white);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--white);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: var(--transition);
+            font-size: clamp(0.875rem, 2vw, 1rem);
+        }
+
+        .nav-links a:hover,
+        .nav-links a.active {
+            background: var(--brand-green);
+            color: var(--white);
+        }
+
+        .nav-toggle {
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            cursor: pointer;
+            padding: 8px;
+            z-index: 1001;
+            background: transparent;
+            border: none;
+        }
+
+        .nav-toggle div {
+            width: 24px;
+            height: 2px;
+            background: var(--white);
+            transition: var(--transition);
+        }
+
+        .main-container {
+            max-width: var(--container-width);
+            margin: 4rem auto 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .content {
+            background-color: var(--white);
+            border-radius: clamp(8px, 2vw, 16px);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .content-header {
+            background-color: var(--accent-green);
+            padding: clamp(1rem, 4vw, 2rem);
+            border-bottom: 1px solid var(--light-gray);
+        }
+
+        .content-header h1 {
+            color: var(--dark-green);
+            margin-bottom: 1rem;
+            font-size: clamp(1.5rem, 4vw, 2.25rem);
+        }
+
+        .intro {
+            color: var(--dark-gray);
+            font-size: clamp(0.975rem, 2vw, 1.1rem);
+            line-height: 1.6;
+        }
+
+        .voice-container {
+            padding: clamp(1.5rem, 4vw, 2.5rem);
+        }
+
+        .onboarding-form {
+            display: grid;
+            gap: 1.5rem;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: var(--black);
+            font-size: clamp(0.95rem, 2vw, 1.05rem);
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 0.875rem;
+            border: 2px solid var(--light-gray);
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(0.95rem, 2vw, 1rem);
+            transition: var(--transition);
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--brand-green);
+            box-shadow: 0 0 0 3px rgba(46, 160, 67, 0.1);
+        }
+
+        .form-group input::placeholder {
+            color: var(--dark-gray);
+            opacity: 0.7;
+        }
+
+        .submit-btn {
+            padding: 1rem;
+            background-color: var(--brand-green);
+            color: var(--white);
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: clamp(0.95rem, 2vw, 1.05rem);
+            transition: var(--transition);
+            margin-top: 1rem;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--dark-green);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .submit-btn:disabled {
+            background-color: var(--dark-gray);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #active-session {
+            display: none;
+        }
+
+        #active-session.show {
+            display: block;
+        }
+
+        .call-stage {
+            background: linear-gradient(165deg, #ecfdf3 0%, #d9f8e7 100%);
+            border-radius: 22px;
+            min-height: 560px;
+            padding: 2rem 1.5rem 6rem 1.5rem;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .agent-badge {
+            position: absolute;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #d8fbe5;
+            color: #0f5132;
+            border: 1px solid #89d7a7;
+            border-radius: 999px;
+            padding: 0.35rem 0.9rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .voice-visual-card {
+            width: min(380px, 88vw);
+            height: 220px;
+            background: #f2fff7;
+            border: 2px solid #9fe0b9;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .agent-dots {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+        }
+
+        .agent-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #27a857;
+            opacity: 0.6;
+        }
+
+        .agent-dots.speaking .agent-dot {
+            animation: voice-bounce 0.9s ease-in-out infinite;
+        }
+
+        .agent-dots.speaking .agent-dot:nth-child(2) { animation-delay: 0.12s; }
+        .agent-dots.speaking .agent-dot:nth-child(3) { animation-delay: 0.24s; }
+        .agent-dots.speaking .agent-dot:nth-child(4) { animation-delay: 0.36s; }
+        .agent-dots.speaking .agent-dot:nth-child(5) { animation-delay: 0.48s; }
+
+        @keyframes voice-bounce {
+            0%, 100% { transform: translateY(0); opacity: 0.5; }
+            50% { transform: translateY(-10px); opacity: 1; }
+        }
+
+        .status-line {
+            margin-top: 1.8rem;
+            text-align: center;
+            color: #135c36;
+            font-weight: 600;
+        }
+
+        .control-dock {
+            position: absolute;
+            bottom: 1.1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(520px, 90%);
+            background: #f4fff8;
+            border: 2px solid #9fe0b9;
+            border-radius: 999px;
+            padding: 0.6rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            box-shadow: 0 10px 24px rgba(24, 104, 57, 0.16);
+        }
+
+        .dock-left {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .dock-btn {
+            border: 1px solid #b4e6c9;
+            background: #ffffff;
+            color: #1f6a3c;
+            border-radius: 999px;
+            padding: 0.45rem 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .dock-btn:hover {
+            background: #e6faef;
+        }
+
+        .dock-btn.muted {
+            background: #ffe9e9;
+            color: #b42318;
+            border-color: #f3b8b8;
+        }
+
+        .disconnect-btn {
+            padding: 0.6rem 1.1rem;
+            background-color: #0f7a3b;
+            color: var(--white);
+            border: none;
+            border-radius: 999px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 0.9rem;
+            letter-spacing: 0.02em;
+        }
+
+        .disconnect-btn:hover {
+            background-color: #0c6330;
+        }
+
+        .audio-mount {
+            display: none;
+        }
+
+        .error-message {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            border-left: 4px solid #c62828;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .success-message {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            border-left: 4px solid #2e7d32;
+            display: none;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        .footer {
+            background-color: var(--black);
+            color: var(--white);
+            text-align: center;
+            padding: 2rem 1rem;
+            margin-top: 5rem;
+        }
+
+        .footer-content {
+            max-width: var(--container-width);
+            margin: 0 auto;
+            text-align: center;
+            padding: 0 1rem;
+            font-size: clamp(0.875rem, 2vw, 1.1rem);
+            opacity: 0.9;
+        }
+
+        @media (max-width: 768px) {
+            .nav-toggle {
+                display: flex;
+            }
+
+            .nav-links {
+                display: none;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                background: var(--black);
+                padding: 1rem;
+                flex-direction: column;
+                align-items: center;
+                border-radius: 0 0 8px 8px;
+                box-shadow: var(--shadow);
+            }
+
+            .nav-links.show {
+                display: flex;
+            }
+
+            .nav-links a {
+                text-align: center;
+                padding: 0.75rem;
+            }
+
+            .voice-container {
+                padding: 1.5rem;
+            }
+
+            .onboarding-form {
+                max-width: 100%;
+            }
+
+            .main-container {
+                margin-top: 5rem;
+            }
+
+            .call-stage {
+                min-height: 460px;
+                padding: 1.2rem 1rem 1rem 1rem;
+                justify-content: flex-start;
+                gap: 0.8rem;
+            }
+
+            .voice-visual-card {
+                width: min(360px, 94vw);
+                height: 180px;
+            }
+
+            .status-line {
+                margin-top: 0.8rem;
+                font-size: 0.95rem;
+            }
+
+            .control-dock {
+                position: static;
+                transform: none;
+                width: 100%;
+                border-radius: 16px;
+                flex-direction: column;
+                align-items: stretch;
+                padding: 0.75rem;
+            }
+
+            .dock-left {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .dock-btn,
+            .disconnect-btn {
+                width: 100%;
+                text-align: center;
+            }
+        }
+
+        @media (hover: none) {
+            .submit-btn:hover {
+                transform: none;
+            }
+
+            .disconnect-btn:hover {
+                transform: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                Growmate 🌱
+            </a>
+            <button class="nav-toggle" aria-label="Toggle navigation">
+                <div></div>
+                <div></div>
+                <div></div>
+            </button>
+            <ul class="nav-links">
+                <li><a href="/">Home</a></li>
+                <li><a href="/disease-detection">GrowFix</a></li>
+                <li><a href="/farm-management">GrowPlan</a></li>
+                <li><a href="/chatbot">GrowBot</a></li>
+                <li><a href="/voicebot" class="active">Voice Bot</a></li>
+                <li><a href="/about_us">About Us</a></li>
+                {% if session.logged_in %}
+                    <li><a href="/logout">Log Out</a></li>
+                {% else %}
+                    <li><a href="/login">Log In</a></li>
+                    <li><a href="/signup">Sign Up</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
+
+    <main class="main-container">
+        <div class="content">
+            <div class="content-header">
+                <h1>🎤 Voice Bot - Real-Time Agriculture Assistant</h1>
+                <p class="intro">Get instant voice assistance for your agriculture needs! Our real-time voice agent is here to help with farm planning, crop advice, disease detection, and more.</p>
+            </div>
+
+            <div class="voice-container">
+                <div class="error-message" id="errorMessage"></div>
+                <div class="success-message" id="successMessage"></div>
+
+                <!-- Onboarding Form -->
+                <div id="onboarding-form" class="onboarding-form">
+                    <h2 style="color: var(--dark-green); text-align: center; margin-bottom: 1rem;">Get Started with Voice Bot</h2>
+                    
+                    <div class="form-group">
+                        <label for="userName">Your Name *</label>
+                        <input type="text" id="userName" placeholder="Enter your name" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="userLanguage">Preferred Language *</label>
+                        <select id="userLanguage" required>
+                            <option value="">Select a language</option>
+                            <option value="en">English</option>
+                            <option value="hi">Hindi</option>
+                            <option value="ta">Tamil</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="pt">Portuguese</option>
+                            <option value="bn">Bengali</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="farmLocation">Farm Location *</label>
+                        <input type="text" id="farmLocation" placeholder="e.g., Tamil Nadu, India" required>
+                    </div>
+
+                    <button type="button" class="submit-btn" id="startVoiceBtn">Start Voice Session</button>
+                </div>
+
+                <!-- Active Voice Session -->
+                <div id="active-session">
+                    <div class="call-stage">
+                        <div class="agent-badge" id="agentBadge">Real-time LiveKit voice</div>
+
+                        <div class="voice-visual-card">
+                            <div class="agent-dots" id="agentDots">
+                                <span class="agent-dot"></span>
+                                <span class="agent-dot"></span>
+                                <span class="agent-dot"></span>
+                                <span class="agent-dot"></span>
+                                <span class="agent-dot"></span>
+                            </div>
+                        </div>
+
+                        <p class="status-line" id="statusLine">Connecting to agent...</p>
+
+                        <div class="control-dock">
+                            <div class="dock-left">
+                                <button type="button" class="dock-btn" id="micToggleBtn">Mic On</button>
+                                <button type="button" class="dock-btn" id="speakerBtn">Enable Audio</button>
+                            </div>
+                            <button type="button" class="disconnect-btn" id="disconnectBtn">End Call</button>
+                        </div>
+
+                        <div id="audioMount" class="audio-mount"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2024 Growmate. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script type="module">
+        import * as LivekitClient from 'https://cdn.jsdelivr.net/npm/livekit-client@2.15.4/dist/livekit-client.esm.mjs';
+
+        document.querySelector('.nav-toggle')?.addEventListener('click', function() {
+            document.querySelector('.nav-links').classList.toggle('show');
+        });
+
+        let room = null;
+        let micEnabled = true;
+        let remoteAgentJoined = false;
+
+        const startVoiceBtn = document.getElementById('startVoiceBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const micToggleBtn = document.getElementById('micToggleBtn');
+        const speakerBtn = document.getElementById('speakerBtn');
+        const onboardingForm = document.getElementById('onboarding-form');
+        const activeSession = document.getElementById('active-session');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const statusLine = document.getElementById('statusLine');
+        const agentBadge = document.getElementById('agentBadge');
+        const agentDots = document.getElementById('agentDots');
+        const audioMount = document.getElementById('audioMount');
+        let audioContext = null;
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+            setTimeout(() => errorMessage.classList.remove('show'), 7000);
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.classList.add('show');
+            setTimeout(() => successMessage.classList.remove('show'), 3000);
+        }
+
+        function setSpeakingState(isSpeaking) {
+            if (isSpeaking) {
+                agentDots.classList.add('speaking');
+            } else {
+                agentDots.classList.remove('speaking');
+            }
+        }
+
+        async function fetchRoomDebug(roomName) {
+            try {
+                const resp = await fetch(`/livekit-room-debug?room=${encodeURIComponent(roomName)}`);
+                if (!resp.ok) {
+                    return null;
+                }
+                return await resp.json();
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function unlockAudio() {
+            if (!audioContext) {
+                const Ctx = window.AudioContext || window.webkitAudioContext;
+                if (Ctx) {
+                    audioContext = new Ctx();
+                }
+            }
+
+            if (audioContext && audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            const audioEls = audioMount.querySelectorAll('audio');
+            for (const el of audioEls) {
+                el.muted = false;
+                el.volume = 1;
+                try {
+                    await el.play();
+                } catch (e) {
+                    // keep trying when user taps enable audio again
+                }
+            }
+        }
+
+        function mountRemoteAudio(track) {
+            const audioElement = track.attach();
+            audioElement.autoplay = true;
+            audioElement.playsInline = true;
+            audioElement.muted = false;
+            audioElement.volume = 1;
+            audioElement.controls = false;
+            audioMount.appendChild(audioElement);
+            audioElement.play().catch(() => {
+                statusLine.textContent = 'Audio blocked by browser. Click Enable Audio.';
+                speakerBtn.classList.add('muted');
+            });
+        }
+
+        startVoiceBtn.addEventListener('click', async () => {
+            const name = document.getElementById('userName').value.trim();
+            const language = document.getElementById('userLanguage').value;
+            const farmLocation = document.getElementById('farmLocation').value.trim();
+
+            if (!name || !language || !farmLocation) {
+                showError('Please fill in all required fields');
+                return;
+            }
+
+            startVoiceBtn.disabled = true;
+            startVoiceBtn.textContent = 'Connecting...';
+            remoteAgentJoined = false;
+            setSpeakingState(false);
+
+            try {
+                const response = await fetch('/livekit-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        language,
+                        farm_location: farmLocation,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to generate token');
+                }
+
+                const data = await response.json();
+                const { token, room: roomName, url, agent_dispatched, dispatch_reason } = data;
+                window.currentVoiceRoom = roomName;
+
+                room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+
+                await unlockAudio();
+
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    if (track.kind === LivekitClient.Track.Kind.Audio) {
+                        remoteAgentJoined = true;
+                        agentBadge.textContent = `Agent live: ${participant?.name || participant?.identity || 'Connected'}`;
+                        statusLine.textContent = 'Agent is listening. Ask your question.';
+                        speakerBtn.textContent = 'Audio On';
+                        speakerBtn.classList.remove('muted');
+                        mountRemoteAudio(track);
+                    }
+                });
+
+                room.on(LivekitClient.RoomEvent.TrackSubscriptionFailed, (trackSid, participant) => {
+                    statusLine.textContent = 'Audio subscription failed. Retrying...';
+                    console.error('[Voice Bot] Track subscription failed:', trackSid, participant);
+                });
+
+                room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+                    try {
+                        track.detach().forEach((el) => el.remove());
+                    } catch (e) {
+                        // ignore detach cleanup errors
+                    }
+                });
+
+                room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+                    setSpeakingState(Array.isArray(speakers) && speakers.length > 0);
+                });
+
+                room.on(LivekitClient.RoomEvent.ParticipantConnected, (participant) => {
+                    remoteAgentJoined = true;
+                    agentBadge.textContent = `Agent live: ${participant?.name || participant?.identity || 'Connected'}`;
+                    statusLine.textContent = 'Two-way real-time voice is active.';
+                });
+
+                room.on(LivekitClient.RoomEvent.Disconnected, () => {
+                    handleDisconnect(false);
+                });
+
+                room.on(LivekitClient.RoomEvent.Reconnecting, () => {
+                    statusLine.textContent = 'Network change detected. Reconnecting...';
+                });
+
+                room.on(LivekitClient.RoomEvent.Reconnected, () => {
+                    statusLine.textContent = 'Reconnected. Waiting for live agent audio...';
+                });
+
+                await room.connect(url, token);
+                await room.localParticipant.setMicrophoneEnabled(true);
+                await unlockAudio();
+
+                onboardingForm.style.display = 'none';
+                activeSession.classList.add('show');
+                agentBadge.textContent = 'Real-time LiveKit voice';
+                statusLine.textContent = `Connected to room ${roomName}. Waiting for AI agent audio...`;
+                showSuccess('Connected. Real-time voice session started.');
+
+                if (!agent_dispatched) {
+                    showError(`Agent dispatch not confirmed: ${dispatch_reason || 'No LIVEKIT_AGENT_NAME configured.'}`);
+                }
+
+                setTimeout(async () => {
+                    if (room && room.state === 'connected' && !remoteAgentJoined) {
+                        const debug = await fetchRoomDebug(roomName);
+                        if (debug) {
+                            const participantCount = Number(debug.participant_count || 0);
+                            const participants = Array.isArray(debug.participants) ? debug.participants : [];
+                            const hasRemoteAudioTrack = participants.some((p) => {
+                                const tracks = Array.isArray(p.tracks) ? p.tracks : [];
+                                return tracks.some((t) => String(t.type).toLowerCase().includes('audio'));
+                            });
+
+                            if (participantCount <= 1) {
+                                statusLine.textContent = 'Backend check: agent is not present in room yet.';
+                            } else if (!hasRemoteAudioTrack) {
+                                statusLine.textContent = 'Backend check: agent connected but no audio track is being published.';
+                            } else {
+                                statusLine.textContent = 'Backend check: audio track exists. Click Enable Audio once.';
+                            }
+                        } else {
+                            statusLine.textContent = 'Connected, but no agent audio yet. Agent may be idle or not publishing audio.';
+                        }
+                    }
+                }, 9000);
+            } catch (error) {
+                showError(`Failed to start voice session: ${error.message}`);
+                startVoiceBtn.disabled = false;
+                startVoiceBtn.textContent = 'Start Voice Session';
+            }
+        });
+
+        speakerBtn.addEventListener('click', async () => {
+            await unlockAudio();
+            speakerBtn.textContent = 'Audio On';
+            speakerBtn.classList.remove('muted');
+            if (room && room.state === 'connected') {
+                statusLine.textContent = 'Audio output enabled. Ask your question.';
+            }
+        });
+
+        micToggleBtn.addEventListener('click', async () => {
+            if (!room || room.state !== 'connected') return;
+            micEnabled = !micEnabled;
+            await room.localParticipant.setMicrophoneEnabled(micEnabled);
+            micToggleBtn.textContent = micEnabled ? 'Mic On' : 'Mic Off';
+            micToggleBtn.classList.toggle('muted', !micEnabled);
+        });
+
+        disconnectBtn.addEventListener('click', async () => {
+            handleDisconnect(true);
+        });
+
+        async function handleDisconnect(byUser) {
+            setSpeakingState(false);
+            if (room) {
+                try {
+                    await room.disconnect();
+                } catch (e) {
+                    // ignore disconnect errors
+                }
+                room = null;
+            }
+            audioMount.innerHTML = '';
+            activeSession.classList.remove('show');
+            onboardingForm.style.display = 'grid';
+            startVoiceBtn.disabled = false;
+            startVoiceBtn.textContent = 'Start Voice Session';
+            speakerBtn.textContent = 'Enable Audio';
+            speakerBtn.classList.remove('muted');
+            micEnabled = true;
+            micToggleBtn.textContent = 'Mic On';
+            micToggleBtn.classList.remove('muted');
+            if (byUser) {
+                showSuccess('Voice session ended');
+            }
+        }
+
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.error-message, .success-message')) {
+                e.target.closest('.error-message, .success-message').classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>

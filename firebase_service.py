@@ -117,3 +117,15 @@ def create_chat_session(uid: str, chat_session_id: str, meta: Optional[Dict[str,
         )
     except Exception as exc:
         logger.error("Failed to create chat session for uid=%s session=%s: %s", uid, chat_session_id, exc)
+
+
+def save_voice_session(uid: str, data: Dict[str, Any]) -> None:
+    """Store voice session metadata for a user."""
+    try:
+        db = get_firestore_client()
+        payload = dict(data)
+        payload["created_at"] = firestore.SERVER_TIMESTAMP
+        payload["updated_at"] = firestore.SERVER_TIMESTAMP
+        db.collection("users").document(uid).collection("voice_sessions").add(payload)
+    except Exception as exc:
+        logger.error("Failed to save voice session for uid=%s: %s", uid, exc)

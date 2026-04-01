@@ -32,6 +32,14 @@
         <priority>0.8</priority>
     </url>
 
+    <!-- Voice Bot Page -->
+    <url>
+        <loc>https://www.growmate.tech/voicebot</loc>
+        <lastmod>2024-11-16</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+    </url>
+
     <!-- About Us Page -->
     <url>
         <loc>https://www.growmate.tech/about_us</loc>

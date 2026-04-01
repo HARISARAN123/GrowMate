@@ -4,12 +4,14 @@ import base64
 import uuid
 import re
 import logging
+import asyncio
 import markdown
 import functools
 from flask import Flask, render_template,send_from_directory, request, redirect, url_for, flash, jsonify, session
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from disease_detection import analyze_plant_disease, get_gemini_analysis, fetch_gemini_response
+from livekit import api
 from firebase_service import (
     upsert_user_profile,
     save_disease_analysis,
@@ -17,6 +19,7 @@ from firebase_service import (
     save_chat_message,
     get_chat_messages,
     create_chat_session,
+    save_voice_session,
 )
 
 # Load environment variables
@@ -419,6 +422,230 @@ def analyze():
         logger.error(f"Error analyzing plant disease: {e}")
         return jsonify({'error': 'Failed to analyze disease'}), 500
 
+@app.route('/voicebot', methods=['GET'])
+@login_required
+def voicebot():
+    """Render the Voice Bot page with onboarding form."""
+    return render_template('voicebot.html')
+
+
+def normalize_livekit_api_url(livekit_url):
+    """Convert ws/wss LiveKit URL to http/https for server-side API calls."""
+    url = (livekit_url or '').strip()
+    if url.startswith('wss://'):
+        return 'https://' + url[len('wss://'):]
+    if url.startswith('ws://'):
+        return 'http://' + url[len('ws://'):]
+    return url
+
+
+@app.route('/livekit-token', methods=['POST'])
+@login_required
+def livekit_token():
+    """Generate a LiveKit access token for voice session."""
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        language = data.get('language', 'en').strip()
+        farm_location = data.get('farm_location', '').strip()
+        
+        if not name:
+            return jsonify({'error': 'Name is required'}), 400
+        
+        # Generate unique room ID and participant ID
+        uid = session['uid']
+        room_id = f"voicebot-{uid}-{uuid.uuid4().hex[:8]}"
+        participant_id = uuid.uuid4().hex[:12]
+        
+        # Get LiveKit configuration
+        livekit_api_key = os.getenv('LIVEKIT_API_KEY')
+        livekit_api_secret = os.getenv('LIVEKIT_API_SECRET')
+        livekit_url = os.getenv('LIVEKIT_URL', 'wss://livekit.example.com')
+        livekit_api_url = normalize_livekit_api_url(livekit_url)
+        
+        if not livekit_api_key or not livekit_api_secret:
+            logger.error('LiveKit API key or secret not configured')
+            return jsonify({'error': 'Voice service not configured'}), 500
+        
+        # Create access token using fluent API
+        jwt_token = (api.AccessToken(api_key=livekit_api_key, api_secret=livekit_api_secret)
+            .with_identity(participant_id)
+            .with_name(name)
+            .with_grants(
+                api.VideoGrants(
+                    room_join=True,
+                    room=room_id,
+                    can_publish=True,
+                    can_publish_data=True,
+                    can_subscribe=True,
+                )
+            )
+            .to_jwt()
+        )
+
+        def dispatch_voice_agent():
+            """Dispatch a configured LiveKit agent into the room."""
+            agent_name = (os.getenv('LIVEKIT_AGENT_NAME') or '').strip()
+            if not agent_name:
+                return {'dispatched': False, 'reason': 'LIVEKIT_AGENT_NAME is not configured'}
+
+            async def _dispatch():
+                lk_api = api.LiveKitAPI(
+                    url=livekit_api_url,
+                    api_key=livekit_api_key,
+                    api_secret=livekit_api_secret,
+                )
+                try:
+                    # Ensure room exists before dispatching agent.
+                    try:
+                        await lk_api.room.create_room(api.CreateRoomRequest(name=room_id))
+                    except Exception as room_error:
+                        # Ignore create errors (e.g., room already exists) and continue.
+                        logger.info('LiveKit room create skipped for %s: %s', room_id, room_error)
+
+                    request_payload = api.CreateAgentDispatchRequest(
+                        agent_name=agent_name,
+                        room=room_id,
+                        metadata=json.dumps(
+                            {
+                                'uid': uid,
+                                'participant_id': participant_id,
+                                'name': name,
+                                'language': language,
+                                'farm_location': farm_location,
+                            }
+                        ),
+                    )
+                    # Dispatch can be eventually consistent; retry once if needed.
+                    try:
+                        result = await lk_api.agent_dispatch.create_dispatch(request_payload)
+                    except Exception:
+                        await asyncio.sleep(0.4)
+                        result = await lk_api.agent_dispatch.create_dispatch(request_payload)
+                    dispatch_id = getattr(result, 'id', '')
+                    return {'dispatched': True, 'dispatch_id': dispatch_id}
+                finally:
+                    await lk_api.aclose()
+
+            try:
+                return asyncio.run(_dispatch())
+            except Exception as dispatch_error:
+                logger.warning('LiveKit agent dispatch failed for room=%s: %s', room_id, dispatch_error)
+                return {'dispatched': False, 'reason': str(dispatch_error)}
+
+        agent_dispatch_info = dispatch_voice_agent()
+        
+        # Save voice session metadata to Firestore (non-blocking)
+        save_voice_session(uid, {
+            'room_id': room_id,
+            'participant_id': participant_id,
+            'name': name,
+            'language': language,
+            'farm_location': farm_location,
+            'status': 'active',
+        })
+        
+        return jsonify({
+            'token': jwt_token,
+            'room': room_id,
+            'url': livekit_url,
+            'participant_id': participant_id,
+            'agent_dispatched': agent_dispatch_info.get('dispatched', False),
+            'dispatch_id': agent_dispatch_info.get('dispatch_id', ''),
+            'dispatch_reason': agent_dispatch_info.get('reason', ''),
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error generating LiveKit token: {e}")
+        return jsonify({'error': 'Failed to generate voice session token'}), 500
+
+
+@app.route('/livekit-room-debug', methods=['GET'])
+@login_required
+def livekit_room_debug():
+    """Return LiveKit room, participant, and dispatch diagnostics for debugging voice output."""
+    room_id = (request.args.get('room') or '').strip()
+    if not room_id:
+        return jsonify({'error': 'room query parameter is required'}), 400
+
+    livekit_api_key = os.getenv('LIVEKIT_API_KEY')
+    livekit_api_secret = os.getenv('LIVEKIT_API_SECRET')
+    livekit_url = os.getenv('LIVEKIT_URL', 'wss://livekit.example.com')
+    livekit_api_url = normalize_livekit_api_url(livekit_url)
+
+    if not livekit_api_key or not livekit_api_secret:
+        return jsonify({'error': 'Voice service not configured'}), 500
+
+    async def _debug_room_state():
+        lk_api = api.LiveKitAPI(
+            url=livekit_api_url,
+            api_key=livekit_api_key,
+            api_secret=livekit_api_secret,
+        )
+        try:
+            rooms_resp = await lk_api.room.list_rooms(api.ListRoomsRequest(names=[room_id]))
+            participants_resp = await lk_api.room.list_participants(api.ListParticipantsRequest(room=room_id))
+            dispatches = []
+            dispatch_error = ''
+            try:
+                dispatch_resp = await lk_api.agent_dispatch.list_dispatch(api.ListAgentDispatchRequest(room=room_id))
+                dispatches = getattr(dispatch_resp, 'agent_dispatches', []) or []
+            except Exception as e:
+                dispatch_error = str(e)
+
+            rooms = getattr(rooms_resp, 'rooms', []) or []
+            participants = getattr(participants_resp, 'participants', []) or []
+
+            participant_payload = []
+            for p in participants:
+                tracks = []
+                for t in (getattr(p, 'tracks', []) or []):
+                    tracks.append(
+                        {
+                            'sid': getattr(t, 'sid', ''),
+                            'type': str(getattr(t, 'type', '')),
+                            'muted': bool(getattr(t, 'muted', False)),
+                        }
+                    )
+                participant_payload.append(
+                    {
+                        'identity': getattr(p, 'identity', ''),
+                        'name': getattr(p, 'name', ''),
+                        'state': str(getattr(p, 'state', '')),
+                        'tracks': tracks,
+                    }
+                )
+
+            dispatch_payload = []
+            for d in dispatches:
+                dispatch_payload.append(
+                    {
+                        'id': getattr(d, 'id', ''),
+                        'agent_name': getattr(d, 'agent_name', ''),
+                        'state': str(getattr(d, 'state', '')),
+                        'room': getattr(d, 'room', ''),
+                    }
+                )
+
+            return {
+                'room_id': room_id,
+                'room_exists': len(rooms) > 0,
+                'participant_count': len(participant_payload),
+                'participants': participant_payload,
+                'dispatch_count': len(dispatch_payload),
+                'dispatches': dispatch_payload,
+                'dispatch_query_error': dispatch_error,
+                'api_url': livekit_api_url,
+            }
+        finally:
+            await lk_api.aclose()
+
+    try:
+        payload = asyncio.run(_debug_room_state())
+        return jsonify(payload), 200
+    except Exception as e:
+        logger.error('LiveKit room debug failed for room=%s: %s', room_id, e)
+        return jsonify({'error': 'LiveKit room debug failed', 'details': str(e)}), 500
 
 @app.route('/about_us')
 def about_us():
